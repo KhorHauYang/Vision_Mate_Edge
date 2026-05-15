@@ -114,9 +114,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // STEP 3: Create the YOLO Output Bucket
-                // Your teammate's YOLO model outputs one giant grid: [1 batch, 7 data points, 5376 boxes]
-                val outputTensor = Array(1) { Array(7) { FloatArray(5376) } }
+                // STEP 3: Create the NEW YOLO Output Bucket
+                // 4 box numbers + 5 class numbers = 9 data points per box!
+                val outputTensor = Array(1) { Array(9) { FloatArray(5376) } }
 
                 // STEP 4: Push the image in and catch the YOLO output!
                 tflite?.run(byteBuffer, outputTensor)
@@ -124,9 +124,10 @@ class MainActivity : AppCompatActivity() {
                 // STEP 5: Decode the YOLO Grid to find the best object!
                 var bestScore = 0.0f
                 var bestClassIndex = -1
-                var bestBoxIndex = -1 // <-- We need to track WHICH box won!
+                var bestBoxIndex = -1
 
-                val numClasses = 3
+                // UPDATE: We now have 5 classes!
+                val numClasses = 5
 
                 for (i in 0 until 5376) {
                     for (c in 0 until numClasses) {
@@ -134,7 +135,7 @@ class MainActivity : AppCompatActivity() {
                         if (score > bestScore) {
                             bestScore = score
                             bestClassIndex = c
-                            bestBoxIndex = i // Remember the box's ID number!
+                            bestBoxIndex = i
                         }
                     }
                 }
@@ -145,11 +146,13 @@ class MainActivity : AppCompatActivity() {
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
                     if (bestScore > 0.75f) {
-                        val labels = arrayOf("Class 0", "Class 1", "Class 2")
+                        // UPDATE: The real English words!
+                        // These match indices 0, 1, 2, 3, 4 based on your screenshot (skipping the empty project)
+                        val labels = arrayOf("Chair", "Door", "Motorcycle", "Staircase", "Unmarked Step")
                         val detectedName = labels[bestClassIndex]
                         val percent = String.format("%.1f", bestScore * 100)
 
-                        // 2. Get the Box Math from the AI
+                        // Get the Box Math from the AI
                         var cx = outputTensor[0][0][bestBoxIndex]
                         var cy = outputTensor[0][1][bestBoxIndex]
                         var w = outputTensor[0][2][bestBoxIndex]
@@ -162,7 +165,7 @@ class MainActivity : AppCompatActivity() {
                             h /= 512f
                         }
 
-                        // 3. Map to your phone's screen
+                        // Map to your phone's screen
                         val screenW = overlay.width.toFloat()
                         val screenH = overlay.height.toFloat()
 
@@ -171,14 +174,13 @@ class MainActivity : AppCompatActivity() {
                         val right = (cx + w / 2) * screenW
                         val bottom = (cy + h / 2) * screenH
 
-                        // THE DEBUGGER: Print the actual coordinates to the screen!
-                        debugText.text = "DETECTED: $detectedName ($percent%)\nBox: [L:${left.toInt()}, T:${top.toInt()}, R:${right.toInt()}, B:${bottom.toInt()}]"
+                        // Display the REAL name on the screen!
+                        debugText.text = "DETECTED: $detectedName ($percent%)"
 
-                        // 4. Draw the Green Box!
+                        // Draw the Green Box!
                         overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
 
                     } else {
-                        // FIX THE FROZEN TEXT! Clear it out when nothing is found.
                         debugText.text = "Scanning..."
                         overlay.drawBox(null)
                     }
