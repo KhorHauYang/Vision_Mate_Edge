@@ -148,7 +148,7 @@ class MainActivity : AppCompatActivity() {
                     if (bestScore > 0.75f) {
                         // UPDATE: The real English words!
                         // These match indices 0, 1, 2, 3, 4 based on your screenshot (skipping the empty project)
-                        val labels = arrayOf("Chair", "Door", "Motorcycle", "Staircase", "Unmarked Step")
+                        val labels = arrayOf("Chair", "Door", "Staircase", "Unmarked Step", "Motorcycle")
                         val detectedName = labels[bestClassIndex]
                         val percent = String.format("%.1f", bestScore * 100)
 
