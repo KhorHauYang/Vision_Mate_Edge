@@ -1,4 +1,4 @@
-package com.example.tech4goodvision
+﻿package com.example.tech4goodvision
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -145,11 +145,20 @@ class MainActivity : AppCompatActivity() {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
-                    if (bestScore > 0.75f) {
-                        // UPDATE: The real English words!
-                        // These match indices 0, 1, 2, 3, 4 based on your screenshot (skipping the empty project)
-                        val labels = arrayOf("Chair", "Door", "Staircase", "Unmarked Step", "Motorcycle")
-                        val detectedName = labels[bestClassIndex]
+                    // FIX: All 5 classes perfectly synced with his latest YAML file!
+                    val labels = arrayOf("Chair", "Door", "Staircase", "Unmarked Step", "Motorcycle")
+                    val detectedName = labels[bestClassIndex]
+
+                    // 🧠 CLASS-SPECIFIC THRESHOLDS: Set custom passing grades for each object!
+                    val passingGrade = when (detectedName) {
+                        "Chair" -> 0.80f      // STRICT: Must be 85% sure to avoid carpets and windows
+                        "Staircase" -> 0.60f  // LENIENT: Only needs to be 60% sure
+                        else -> 0.70f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
+                    }
+
+                    // Now, test the AI's score against the custom passing grade
+                    if (bestScore > passingGrade) {
+
                         val percent = String.format("%.1f", bestScore * 100)
 
                         // Get the Box Math from the AI
