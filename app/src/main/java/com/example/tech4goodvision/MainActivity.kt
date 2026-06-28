@@ -153,7 +153,8 @@ class MainActivity : AppCompatActivity() {
                     val passingGrade = when (detectedName) {
                         "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
                         "Staircase" -> 0.60f  // LENIENT: Only needs to be 60% sure
-                        "Table" -> 0.80f      // NEW: 80% is usually solid for large furniture
+                        "Unmarked Step" -> 0.65f
+                        "Table" -> 0.60f      // NEW: 80% is usually solid for large furniture
                         else -> 0.75f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
                     }
 
