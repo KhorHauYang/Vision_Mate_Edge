@@ -115,8 +115,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // STEP 3: Create the NEW YOLO Output Bucket
-                // 4 box numbers + 5 class numbers = 9 data points per box!
-                val outputTensor = Array(1) { Array(9) { FloatArray(5376) } }
+// 4 box numbers + 6 class numbers = 10 data points per box!
+                val outputTensor = Array(1) { Array(10) { FloatArray(5376) } }
 
                 // STEP 4: Push the image in and catch the YOLO output!
                 tflite?.run(byteBuffer, outputTensor)
@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
                 var bestBoxIndex = -1
 
                 // UPDATE: We now have 5 classes!
-                val numClasses = 5
+                val numClasses = 6
 
                 for (i in 0 until 5376) {
                     for (c in 0 until numClasses) {
@@ -145,15 +145,16 @@ class MainActivity : AppCompatActivity() {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
-                    // FIX: All 5 classes perfectly synced with his latest YAML file!
-                    val labels = arrayOf("Chair", "Door", "Staircase", "Unmarked Step", "Motorcycle")
+                    // FIX: All 6 classes perfectly synced! (Verify this exact order with your AI Lead)
+                    val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
                     val detectedName = labels[bestClassIndex]
 
                     // 🧠 CLASS-SPECIFIC THRESHOLDS: Set custom passing grades for each object!
                     val passingGrade = when (detectedName) {
-                        "Chair" -> 0.80f      // STRICT: Must be 85% sure to avoid carpets and windows
+                        "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
                         "Staircase" -> 0.60f  // LENIENT: Only needs to be 60% sure
-                        else -> 0.70f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
+                        "Table" -> 0.80f      // NEW: 80% is usually solid for large furniture
+                        else -> 0.75f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
                     }
 
                     // Now, test the AI's score against the custom passing grade
