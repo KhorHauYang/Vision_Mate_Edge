@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // STEP 6: Display the text AND draw the box!
+                // STEP 6: Display the text AND draw the box
                 runOnUiThread {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
@@ -171,8 +171,7 @@ class MainActivity : AppCompatActivity() {
                     // ==========================================
                     // PHASE 2: DO THE MATH FIRST
                     // ==========================================
-                    // We must pull the coordinates out of the AI matrix first so we can calculate the area!
-
+                    // Pull the coordinates out of the AI matrix
                     var cx = outputTensor[0][0][bestBoxIndex]
                     var cy = outputTensor[0][1][bestBoxIndex]
                     var w = outputTensor[0][2][bestBoxIndex]
@@ -200,27 +199,30 @@ class MainActivity : AppCompatActivity() {
                     // ==========================================
                     // PHASE 3: THE SAFETY FILTER & SPAM BLOCKER
                     // ==========================================
+
+                    // 🧠 CLASS-SPECIFIC THRESHOLDS: Restore your original confidence grades!
+                    val passingGrade = when (detectedName) {
+                        "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
+                        "Staircase" -> 0.70f  // LENIENT: Only needs to be 60% sure
+                        "Unmarked Step" -> 0.65f
+                        "Table" -> 0.60f      // NEW: 80% is usually solid for large furniture
+                        "Motorcycle" -> 0.40f
+                        else -> 0.80f         // DEFAULT: 80% for Doors
+                    }
+
                     var shouldSpeak = false
 
-                    // The AI must pass BOTH the Confidence grade AND the Size (Distance) grade
-                    when (detectedName) {
-                        "Chair" -> {
-                            if (screenPercentage > 35f && bestScore > 0.75f) shouldSpeak = true
-                        }
-                        "Door" -> {
-                            if (screenPercentage > 75f && bestScore > 0.75f) shouldSpeak = true
-                        }
-                        "Staircase" -> {
-                            if (screenPercentage > 20f && bestScore > 0.60f) shouldSpeak = true
-                        }
-                        "Table" -> {
-                            if (screenPercentage > 40f && bestScore > 0.60f) shouldSpeak = true
-                        }
-                        "Unmarked Step" -> {
-                            if (screenPercentage > 20f && bestScore > 0.65f) shouldSpeak = true
-                        }
-                        else -> { // Motorcycle or anything else
-                            if (screenPercentage > 30f && bestScore > 0.75f) shouldSpeak = true
+                    // Step A: Does the AI meet your strict confidence threshold?
+                    if (bestScore > passingGrade) {
+                        // Step B: If yes, is the object close enough (screen percentage) to matter?
+                        when (detectedName) {
+                            "Chair" -> { if (screenPercentage > 35f) shouldSpeak = true }
+                            "Door" -> { if (screenPercentage > 75f) shouldSpeak = true }
+                            "Staircase" -> { if (screenPercentage > 20f) shouldSpeak = true }
+                            "Table" -> { if (screenPercentage > 40f) shouldSpeak = true }
+                            "Unmarked Step" -> { if (screenPercentage > 20f) shouldSpeak = true }
+                            "Motorcycle" -> { if (screenPercentage > 30f) shouldSpeak = true }
+                            else -> { if (screenPercentage > 30f) shouldSpeak = true }
                         }
                     }
 
@@ -251,118 +253,10 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         // The object is either too far away, or the AI isn't confident enough
                         // We do not draw the box or speak, keeping the interface clean
-                        debugText.text = "Scanning (Objects clear/too far)..."
+                        debugText.text = "Scanning (Objects clear/too far/low confidence)..."
                         overlay.drawBox(null)
                     }
                 }
-                /* runOnUiThread {
-                    val debugText = findViewById<TextView>(R.id.tv_debug_log)
-                    val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
-
-                    // FIX: All 6 classes perfectly synced! (Verify this exact order with your AI Lead)
-                    val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
-                    val detectedName = labels[bestClassIndex]
-
-                    // 🧠 CLASS-SPECIFIC THRESHOLDS: Set custom passing grades for each object!
-                    val passingGrade = when (detectedName) {
-                        "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
-                        "Staircase" -> 0.70f  // LENIENT: Only needs to be 60% sure
-                        "Unmarked Step" -> 0.65f
-                        "Table" -> 0.60f      // NEW: 80% is usually solid for large furniture
-                        "Motorcycle" -> 0.40f
-                        else -> 0.80f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
-                    }
-
-                    // Now, test the AI's score against the custom passing grade
-                    if (bestScore > passingGrade) {
-
-                        val percent = String.format("%.1f", bestScore * 100)
-
-                        // Get the Box Math from the AI
-                        var cx = outputTensor[0][0][bestBoxIndex]
-                        var cy = outputTensor[0][1][bestBoxIndex]
-                        var w = outputTensor[0][2][bestBoxIndex]
-                        var h = outputTensor[0][3][bestBoxIndex]
-
-                        if (cx > 2f) {
-                            cx /= 512f
-                            cy /= 512f
-                            w /= 512f
-                            h /= 512f
-                        }
-
-                        // Map to your phone's screen
-                        val screenW = overlay.width.toFloat()
-                        val screenH = overlay.height.toFloat()
-
-                        val left = (cx - w / 2) * screenW
-                        val top = (cy - h / 2) * screenH
-                        val right = (cx + w / 2) * screenW
-                        val bottom = (cy + h / 2) * screenH
-
-                        // Display the REAL name on the screen!
-                        debugText.text = "DETECTED: $detectedName ($percent%)"
-
-                        // Draw the Green Box!
-                        overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
-
-                    } else {
-                        debugText.text = "Scanning..."
-                        overlay.drawBox(null)
-                    }
-
-                    // NEW! PHASE 3: The Safety Filter Logic Switch
-                    var shouldSpeak = false
-
-                    when (detectedName) {
-                        "Chair" -> {
-                            if (screenPercentage > 35f && bestScore > 0.75f) {
-                                shouldSpeak = true
-                            }
-                        }
-                        "Door" -> {
-                            if (screenPercentage > 75f && bestScore > 0.75f) {
-                                shouldSpeak = true
-                            }
-                        }
-                        "Staircase" -> {
-                            // Example: Stairs might be dangerous further away, so lower percentage needed
-                            if (screenPercentage > 20f && bestScore > 0.60f) {
-                                shouldSpeak = true
-                            }
-                        }
-                        // Add other cases (Table, Unmarked Step, Motorcycle) as needed
-                    }
-
-                //NEW! PHASE 3: The Spam Blocker (Debounce Execution)
-                    if (shouldSpeak) {
-                        val currentTime = System.currentTimeMillis()
-
-                        // Check if 2.5 seconds have passed since the last announcement
-                        if (currentTime - lastSpokenTime > cooldownTimer) {
-
-                            // Trigger the audio!
-                            if (isTtsReady) {
-                                tts.speak(detectedName, TextToSpeech.QUEUE_FLUSH, null, null)
-                            }
-
-                            // Lock the timer
-                            lastSpokenTime = currentTime
-
-                            // Update UI
-                            debugText.text = "DETECTED: $detectedName - AUDIO TRIGGERED!"
-                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
-                        } else {
-                            // Object is close, but we are in cooldown so we don't spam the user
-                            debugText.text = "DETECTED: $detectedName (Audio Cooldown...)"
-                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
-                        }
-                    } else {
-                        // Object detected but too far away/low confidence
-                        debugText.text = "Scanning (Object too far)..."
-                        overlay.drawBox(null)
-                    }
-                } */
 
             } catch (e: Exception) {
                 // If the AI outputs a different shape (e.g., it's a YOLO model instead of SSD), we will catch the error here so the app doesn't crash.
