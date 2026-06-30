@@ -152,10 +152,11 @@ class MainActivity : AppCompatActivity() {
                     // 🧠 CLASS-SPECIFIC THRESHOLDS: Set custom passing grades for each object!
                     val passingGrade = when (detectedName) {
                         "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
-                        "Staircase" -> 0.60f  // LENIENT: Only needs to be 60% sure
+                        "Staircase" -> 0.70f  // LENIENT: Only needs to be 60% sure
                         "Unmarked Step" -> 0.65f
                         "Table" -> 0.60f      // NEW: 80% is usually solid for large furniture
-                        else -> 0.75f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
+                        "Motorcycle" -> 0.40f
+                        else -> 0.80f         // DEFAULT: 75% for Doors, Steps, and Motorcycles
                     }
 
                     // Now, test the AI's score against the custom passing grade
