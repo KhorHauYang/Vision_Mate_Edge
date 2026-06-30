@@ -1,10 +1,8 @@
 ﻿package com.example.tech4goodvision
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
-import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -24,20 +22,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var tflite: Interpreter? = null
 
-    // NEW: Voice Engine Variables
+    // Voice Engine Variables
     private lateinit var tts: TextToSpeech
     private var isTtsReady = false
 
-    // NEW: Spam Blocker (Debounce) Variables
+    // ⏱️ TIMERS: The 1-Second Stare & The 2.5-Second Cooldown
+    private var currentlyTrackingObject: String = ""
+    private var trackingStartTime: Long = 0
     private var lastSpokenTime: Long = 0
-    private val cooldownTimer = 2500L // 2.5 seconds in milliseconds
+    private val cooldownTimer = 2500L
+    private val stareTimer = 1000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-        // 1. Try to load your teammate's model
         try {
             tflite = Interpreter(loadModelFile())
             Toast.makeText(this, "AI Brain Loaded Successfully!", Toast.LENGTH_SHORT).show()
@@ -45,14 +45,11 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Waiting for model.tflite in assets...", Toast.LENGTH_LONG).show()
         }
 
-
         cameraExecutor = Executors.newSingleThreadExecutor()
         requestCameraPermission()
 
-        // Initialize the Voice Engine
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                // Set to English (or use Locale("ms", "MY") for Malay)
                 val result = tts.setLanguage(java.util.Locale.ENGLISH)
                 if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                     isTtsReady = true
@@ -61,7 +58,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Helper function to read the file from the assets folder
     private fun loadModelFile(): MappedByteBuffer {
         val fileDescriptor = assets.openFd("model.tflite")
         val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
@@ -81,20 +77,15 @@ class MainActivity : AppCompatActivity() {
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
-            val preview = androidx.camera.core.Preview.Builder()
-                .build()
-                .also {
-                    val viewFinder = findViewById<androidx.camera.view.PreviewView>(R.id.viewFinder)
-                    it.setSurfaceProvider(viewFinder.surfaceProvider)
-                }
+            val preview = androidx.camera.core.Preview.Builder().build().also {
+                val viewFinder = findViewById<androidx.camera.view.PreviewView>(R.id.viewFinder)
+                it.setSurfaceProvider(viewFinder.surfaceProvider)
+            }
 
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor) { imageProxy ->
-                        runInference(imageProxy)
-                    }
+                .build().also {
+                    it.setAnalyzer(cameraExecutor) { imageProxy -> runInference(imageProxy) }
                 }
 
             cameraProvider.bindToLifecycle(this, androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer)
@@ -104,19 +95,12 @@ class MainActivity : AppCompatActivity() {
     private fun runInference(imageProxy: ImageProxy) {
         if (tflite != null) {
             try {
-                // STEP 1: Get the frame, ROTATE it upright, then squish it
                 val bitmap = imageProxy.toBitmap()
-
-                // Fix the sideways camera bug!
                 val matrix = android.graphics.Matrix()
                 matrix.postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
                 val uprightBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-
-                // Now squish the upright image for the AI
                 val resizedBitmap = android.graphics.Bitmap.createScaledBitmap(uprightBitmap, 512, 512, true)
 
-                // STEP 2: Convert the image into FLOAT32 bytes (The math the AI actually eats)
-                // 512 width * 512 height * 3 colors (RGB) * 4 bytes (Float)
                 val byteBuffer = java.nio.ByteBuffer.allocateDirect(512 * 512 * 3 * 4)
                 byteBuffer.order(java.nio.ByteOrder.nativeOrder())
 
@@ -127,26 +111,18 @@ class MainActivity : AppCompatActivity() {
                 for (i in 0 until 512) {
                     for (j in 0 until 512) {
                         val valInt = intValues[pixel++]
-                        // Extract Red, Green, Blue and convert to Float (normalized 0 to 1)
                         byteBuffer.putFloat(((valInt shr 16) and 0xFF) / 255.0f)
                         byteBuffer.putFloat(((valInt shr 8) and 0xFF) / 255.0f)
                         byteBuffer.putFloat((valInt and 0xFF) / 255.0f)
                     }
                 }
 
-                // STEP 3: Create the NEW YOLO Output Bucket
-// 4 box numbers + 6 class numbers = 10 data points per box!
                 val outputTensor = Array(1) { Array(10) { FloatArray(5376) } }
-
-                // STEP 4: Push the image in and catch the YOLO output!
                 tflite?.run(byteBuffer, outputTensor)
 
-                // STEP 5: Decode the YOLO Grid to find the best object!
                 var bestScore = 0.0f
                 var bestClassIndex = -1
                 var bestBoxIndex = -1
-
-                // UPDATE: We now have 5 classes!
                 val numClasses = 6
 
                 for (i in 0 until 5376) {
@@ -160,7 +136,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // STEP 6: Display the text AND draw the box
                 runOnUiThread {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
@@ -168,27 +143,21 @@ class MainActivity : AppCompatActivity() {
                     val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
                     val detectedName = labels[bestClassIndex]
 
-                    // ==========================================
-                    // PHASE 2: DO THE MATH FIRST
-                    // ==========================================
-                    // Pull the coordinates out of the AI matrix
+                    // Get Coordinates & Size Math
                     var cx = outputTensor[0][0][bestBoxIndex]
                     var cy = outputTensor[0][1][bestBoxIndex]
                     var w = outputTensor[0][2][bestBoxIndex]
                     var h = outputTensor[0][3][bestBoxIndex]
 
-                    // Normalize to 0.0 - 1.0 scale if necessary
-                    if (cx > 2f) {
-                        cx /= 512f
-                        cy /= 512f
-                        w /= 512f
-                        h /= 512f
-                    }
+                    if (cx > 2f) { cx /= 512f; cy /= 512f; w /= 512f; h /= 512f }
 
-                    // Calculate Area Percentage for the Audio Filter
                     val screenPercentage = (w * h) * 100f
 
-                    // Calculate Physical Screen Coordinates for the Green Box
+                    // NEW: Create the floating label for Width and Height
+                    val wPercentStr = String.format("%.1f", w * 100f)
+                    val hPercentStr = String.format("%.1f", h * 100f)
+                    val dimensionsText = "W: $wPercentStr% | H: $hPercentStr%"
+
                     val screenW = overlay.width.toFloat()
                     val screenH = overlay.height.toFloat()
                     val left = (cx - w / 2) * screenW
@@ -196,85 +165,94 @@ class MainActivity : AppCompatActivity() {
                     val right = (cx + w / 2) * screenW
                     val bottom = (cy + h / 2) * screenH
 
-                    // ==========================================
-                    // PHASE 3: THE SAFETY FILTER & SPAM BLOCKER
-                    // ==========================================
-
-                    // 🧠 CLASS-SPECIFIC THRESHOLDS: Restore your original confidence grades!
+                    // =========================================
+                    // 1. VISUAL RULE: Does it pass the Confidence test?
+                    // =========================================
+                    var isConfident = false
                     val passingGrade = when (detectedName) {
-                        "Chair" -> 0.85f      // STRICT: Must be 85% sure to avoid carpets and windows
-                        "Staircase" -> 0.70f  // LENIENT: Only needs to be 60% sure
+                        "Chair" -> 0.85f
+                        "Staircase" -> 0.70f
                         "Unmarked Step" -> 0.65f
-                        "Table" -> 0.60f      // NEW: 80% is usually solid for large furniture
+                        "Table" -> 0.60f
                         "Motorcycle" -> 0.40f
-                        else -> 0.80f         // DEFAULT: 80% for Doors
+                        else -> 0.80f
                     }
 
-                    var shouldSpeak = false
-
-                    // Step A: Does the AI meet your strict confidence threshold?
                     if (bestScore > passingGrade) {
-                        // Step B: If yes, is the object close enough (screen percentage) to matter?
-                        when (detectedName) {
-                            "Chair" -> { if (screenPercentage > 35f) shouldSpeak = true }
-                            "Door" -> { if (screenPercentage > 75f) shouldSpeak = true }
-                            "Staircase" -> { if (screenPercentage > 20f) shouldSpeak = true }
-                            "Table" -> { if (screenPercentage > 40f) shouldSpeak = true }
-                            "Unmarked Step" -> { if (screenPercentage > 20f) shouldSpeak = true }
-                            "Motorcycle" -> { if (screenPercentage > 30f) shouldSpeak = true }
-                            else -> { if (screenPercentage > 30f) shouldSpeak = true }
-                        }
+                        isConfident = true
                     }
 
-                    // The Execution & Debounce Engine
-                    if (shouldSpeak) {
-                        val currentTime = System.currentTimeMillis()
+                    // =========================================
+                    // 2. AUDIO RULE: Is it dangerously close to the user?
+                    // NOTE: Thresholds updated based on your recent photo sizes!
+                    // =========================================
+                    var isCloseEnough = false
+                    when (detectedName) {
+                        "Chair" -> if (screenPercentage > 20f) isCloseEnough = true
+                        "Door" -> if (screenPercentage > 75f) isCloseEnough = true
+                        "Staircase" -> if (screenPercentage > 15f) isCloseEnough = true
+                        "Table" -> if (screenPercentage > 25f) isCloseEnough = true
+                        "Unmarked Step" -> if (screenPercentage > 8f) isCloseEnough = true
+                        "Motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
+                    }
 
-                        // Check the 2.5-second cooldown timer
-                        if (currentTime - lastSpokenTime > cooldownTimer) {
+                    // =========================================
+                    // 3. EXECUTION LOGIC
+                    // =========================================
+                    if (isConfident) {
+                        // INSTANTLY DRAW THE GREEN BOX AND THE W/H TEXT!
+                        val percent = String.format("%.1f", bestScore * 100)
+                        overlay.drawBox(android.graphics.RectF(left, top, right, bottom), dimensionsText)
 
-                            // 🎤 FIRE THE AUDIO!
-                            if (isTtsReady) {
-                                tts.speak(detectedName, TextToSpeech.QUEUE_FLUSH, null, null)
+                        if (isCloseEnough) {
+                            val currentTime = System.currentTimeMillis()
+
+                            if (detectedName != currentlyTrackingObject) {
+                                currentlyTrackingObject = detectedName
+                                trackingStartTime = currentTime
+                                debugText.text = "DETECTED: $detectedName $percent% (Getting closer...)"
+
+                            } else {
+                                val timeStared = currentTime - trackingStartTime
+
+                                if (timeStared >= stareTimer) {
+                                    if (currentTime - lastSpokenTime > cooldownTimer) {
+                                        if (isTtsReady) tts.speak("$detectedName ahead", TextToSpeech.QUEUE_FLUSH, null, null)
+                                        lastSpokenTime = currentTime
+                                        debugText.text = "DETECTED: $detectedName $percent% - AUDIO TRIGGERED!"
+                                    } else {
+                                        debugText.text = "DETECTED: $detectedName $percent% (Audio Cooldown)"
+                                    }
+                                } else {
+                                    debugText.text = "DETECTED: $detectedName $percent% (Verifying 1s...)"
+                                }
                             }
-
-                            // Lock the timer
-                            lastSpokenTime = currentTime
-
-                            // Update UI to show audio fired
-                            debugText.text = "DETECTED: $detectedName - AUDIO TRIGGERED!"
-                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
-
                         } else {
-                            // Object is verified close, but we are in audio cooldown
-                            debugText.text = "DETECTED: $detectedName (Audio Cooldown...)"
-                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
+                            debugText.text = "DETECTED: $detectedName $percent% (Too far to speak)"
+                            currentlyTrackingObject = ""
                         }
                     } else {
-                        // The object is either too far away, or the AI isn't confident enough
-                        // We do not draw the box or speak, keeping the interface clean
-                        debugText.text = "Scanning (Objects clear/too far/low confidence)..."
-                        overlay.drawBox(null)
+                        // Not confident enough. Hide everything.
+                        currentlyTrackingObject = ""
+                        debugText.text = "Scanning..."
+                        overlay.drawBox(null, "") // Pass empty text when clearing the box
                     }
                 }
 
             } catch (e: Exception) {
-                // If the AI outputs a different shape (e.g., it's a YOLO model instead of SSD), we will catch the error here so the app doesn't crash.
                 runOnUiThread {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     debugText.text = "AI Engine Note: ${e.message}"
                 }
             }
         }
-
-        imageProxy.close() // ALWAYS close the frame so the camera doesn't freeze!
+        imageProxy.close()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         tflite?.close()
         cameraExecutor.shutdown()
-        // NEW!
         if (::tts.isInitialized) {
             tts.stop()
             tts.shutdown()
