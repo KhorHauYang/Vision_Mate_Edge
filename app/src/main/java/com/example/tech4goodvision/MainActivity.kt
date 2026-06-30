@@ -3,6 +3,7 @@
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -23,6 +24,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var tflite: Interpreter? = null
 
+    // NEW: Voice Engine Variables
+    private lateinit var tts: TextToSpeech
+    private var isTtsReady = false
+
+    // NEW: Spam Blocker (Debounce) Variables
+    private var lastSpokenTime: Long = 0
+    private val cooldownTimer = 2500L // 2.5 seconds in milliseconds
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -39,6 +48,17 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
         requestCameraPermission()
+
+        // Initialize the Voice Engine
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                // Set to English (or use Locale("ms", "MY") for Malay)
+                val result = tts.setLanguage(java.util.Locale.ENGLISH)
+                if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    isTtsReady = true
+                }
+            }
+        }
     }
 
     // Helper function to read the file from the assets folder
@@ -145,6 +165,100 @@ class MainActivity : AppCompatActivity() {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
+                    val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
+                    val detectedName = labels[bestClassIndex]
+
+                    // ==========================================
+                    // PHASE 2: DO THE MATH FIRST
+                    // ==========================================
+                    // We must pull the coordinates out of the AI matrix first so we can calculate the area!
+
+                    var cx = outputTensor[0][0][bestBoxIndex]
+                    var cy = outputTensor[0][1][bestBoxIndex]
+                    var w = outputTensor[0][2][bestBoxIndex]
+                    var h = outputTensor[0][3][bestBoxIndex]
+
+                    // Normalize to 0.0 - 1.0 scale if necessary
+                    if (cx > 2f) {
+                        cx /= 512f
+                        cy /= 512f
+                        w /= 512f
+                        h /= 512f
+                    }
+
+                    // Calculate Area Percentage for the Audio Filter
+                    val screenPercentage = (w * h) * 100f
+
+                    // Calculate Physical Screen Coordinates for the Green Box
+                    val screenW = overlay.width.toFloat()
+                    val screenH = overlay.height.toFloat()
+                    val left = (cx - w / 2) * screenW
+                    val top = (cy - h / 2) * screenH
+                    val right = (cx + w / 2) * screenW
+                    val bottom = (cy + h / 2) * screenH
+
+                    // ==========================================
+                    // PHASE 3: THE SAFETY FILTER & SPAM BLOCKER
+                    // ==========================================
+                    var shouldSpeak = false
+
+                    // The AI must pass BOTH the Confidence grade AND the Size (Distance) grade
+                    when (detectedName) {
+                        "Chair" -> {
+                            if (screenPercentage > 35f && bestScore > 0.75f) shouldSpeak = true
+                        }
+                        "Door" -> {
+                            if (screenPercentage > 75f && bestScore > 0.75f) shouldSpeak = true
+                        }
+                        "Staircase" -> {
+                            if (screenPercentage > 20f && bestScore > 0.60f) shouldSpeak = true
+                        }
+                        "Table" -> {
+                            if (screenPercentage > 40f && bestScore > 0.60f) shouldSpeak = true
+                        }
+                        "Unmarked Step" -> {
+                            if (screenPercentage > 20f && bestScore > 0.65f) shouldSpeak = true
+                        }
+                        else -> { // Motorcycle or anything else
+                            if (screenPercentage > 30f && bestScore > 0.75f) shouldSpeak = true
+                        }
+                    }
+
+                    // The Execution & Debounce Engine
+                    if (shouldSpeak) {
+                        val currentTime = System.currentTimeMillis()
+
+                        // Check the 2.5-second cooldown timer
+                        if (currentTime - lastSpokenTime > cooldownTimer) {
+
+                            // 🎤 FIRE THE AUDIO!
+                            if (isTtsReady) {
+                                tts.speak(detectedName, TextToSpeech.QUEUE_FLUSH, null, null)
+                            }
+
+                            // Lock the timer
+                            lastSpokenTime = currentTime
+
+                            // Update UI to show audio fired
+                            debugText.text = "DETECTED: $detectedName - AUDIO TRIGGERED!"
+                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
+
+                        } else {
+                            // Object is verified close, but we are in audio cooldown
+                            debugText.text = "DETECTED: $detectedName (Audio Cooldown...)"
+                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
+                        }
+                    } else {
+                        // The object is either too far away, or the AI isn't confident enough
+                        // We do not draw the box or speak, keeping the interface clean
+                        debugText.text = "Scanning (Objects clear/too far)..."
+                        overlay.drawBox(null)
+                    }
+                }
+                /* runOnUiThread {
+                    val debugText = findViewById<TextView>(R.id.tv_debug_log)
+                    val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
+
                     // FIX: All 6 classes perfectly synced! (Verify this exact order with your AI Lead)
                     val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
                     val detectedName = labels[bestClassIndex]
@@ -195,7 +309,59 @@ class MainActivity : AppCompatActivity() {
                         debugText.text = "Scanning..."
                         overlay.drawBox(null)
                     }
-                }
+
+                    // NEW! PHASE 3: The Safety Filter Logic Switch
+                    var shouldSpeak = false
+
+                    when (detectedName) {
+                        "Chair" -> {
+                            if (screenPercentage > 35f && bestScore > 0.75f) {
+                                shouldSpeak = true
+                            }
+                        }
+                        "Door" -> {
+                            if (screenPercentage > 75f && bestScore > 0.75f) {
+                                shouldSpeak = true
+                            }
+                        }
+                        "Staircase" -> {
+                            // Example: Stairs might be dangerous further away, so lower percentage needed
+                            if (screenPercentage > 20f && bestScore > 0.60f) {
+                                shouldSpeak = true
+                            }
+                        }
+                        // Add other cases (Table, Unmarked Step, Motorcycle) as needed
+                    }
+
+                //NEW! PHASE 3: The Spam Blocker (Debounce Execution)
+                    if (shouldSpeak) {
+                        val currentTime = System.currentTimeMillis()
+
+                        // Check if 2.5 seconds have passed since the last announcement
+                        if (currentTime - lastSpokenTime > cooldownTimer) {
+
+                            // Trigger the audio!
+                            if (isTtsReady) {
+                                tts.speak(detectedName, TextToSpeech.QUEUE_FLUSH, null, null)
+                            }
+
+                            // Lock the timer
+                            lastSpokenTime = currentTime
+
+                            // Update UI
+                            debugText.text = "DETECTED: $detectedName - AUDIO TRIGGERED!"
+                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
+                        } else {
+                            // Object is close, but we are in cooldown so we don't spam the user
+                            debugText.text = "DETECTED: $detectedName (Audio Cooldown...)"
+                            overlay.drawBox(android.graphics.RectF(left, top, right, bottom))
+                        }
+                    } else {
+                        // Object detected but too far away/low confidence
+                        debugText.text = "Scanning (Object too far)..."
+                        overlay.drawBox(null)
+                    }
+                } */
 
             } catch (e: Exception) {
                 // If the AI outputs a different shape (e.g., it's a YOLO model instead of SSD), we will catch the error here so the app doesn't crash.
@@ -213,5 +379,10 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         tflite?.close()
         cameraExecutor.shutdown()
+        // NEW!
+        if (::tts.isInitialized) {
+            tts.stop()
+            tts.shutdown()
+        }
     }
 }
