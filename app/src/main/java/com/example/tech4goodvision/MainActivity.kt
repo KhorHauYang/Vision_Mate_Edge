@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var tflite: Interpreter? = null
 
-    // NEW: TTS Voice Engine Variables
+    // NEW: Voice Engine Variables
     private lateinit var tts: TextToSpeech
     private var isTtsReady = false
 
