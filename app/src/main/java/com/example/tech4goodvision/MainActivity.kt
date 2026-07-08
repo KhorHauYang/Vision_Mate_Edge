@@ -30,8 +30,9 @@ class MainActivity : AppCompatActivity() {
     private var currentlyTrackingObject: String = ""
     private var trackingStartTime: Long = 0
     private var lastSpokenTime: Long = 0
-    private val cooldownTimer = 2500L
-    private val stareTimer = 1000L
+    private var isFirstWarningGiven: Boolean = false // NEW: Remembers if we said the 1st warning!
+    private val cooldownTimer = 4000L
+    private val stareTimer = 500L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,9 +174,9 @@ class MainActivity : AppCompatActivity() {
                         "Chair" -> 0.85f
                         "Staircase" -> 0.70f
                         "Unmarked Step" -> 0.65f
-                        "Table" -> 0.60f
+                        "Table" -> 0.50f
                         "Motorcycle" -> 0.40f
-                        else -> 0.80f
+                        else -> 0.65f
                     }
 
                     if (bestScore > passingGrade) {
@@ -189,10 +190,10 @@ class MainActivity : AppCompatActivity() {
                     var isCloseEnough = false
                     when (detectedName) {
                         "Chair" -> if (screenPercentage > 20f) isCloseEnough = true
-                        "Door" -> if (screenPercentage > 75f) isCloseEnough = true
+                        "Door" -> if (screenPercentage > 72f) isCloseEnough = true
                         "Staircase" -> if (screenPercentage > 15f) isCloseEnough = true
                         "Table" -> if (screenPercentage > 25f) isCloseEnough = true
-                        "Unmarked Step" -> if (screenPercentage > 8f) isCloseEnough = true
+                        "Unmarked Step" -> if (screenPercentage > 7f) isCloseEnough = true
                         "Motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
                     }
 
@@ -210,6 +211,7 @@ class MainActivity : AppCompatActivity() {
                             if (detectedName != currentlyTrackingObject) {
                                 currentlyTrackingObject = detectedName
                                 trackingStartTime = currentTime
+                                isFirstWarningGiven = false // NEW: Reset memory for a new object!
                                 debugText.text = "DETECTED: $detectedName $percent% (Getting closer...)"
 
                             } else {
@@ -217,37 +219,52 @@ class MainActivity : AppCompatActivity() {
 
                                 if (timeStared >= stareTimer) {
                                     if (currentTime - lastSpokenTime > cooldownTimer) {
-                                        if (isTtsReady) tts.speak("$detectedName ahead", TextToSpeech.QUEUE_FLUSH, null, null)
+
+                                        // 🧠 NEW: Smart Audio Logic!
+                                        if (isTtsReady) {
+                                            if (!isFirstWarningGiven) {
+                                                // The First Warning
+                                                tts.speak("$detectedName, 1 meter ahead, honey", TextToSpeech.QUEUE_FLUSH, null, null)
+                                                isFirstWarningGiven = true // Mark it as spoken!
+                                            } else {
+                                                // The Reminder (if they are standing still)
+                                                tts.speak("$detectedName is still in front of you, honey", TextToSpeech.QUEUE_FLUSH, null, null)
+                                            }
+                                        }
+
                                         lastSpokenTime = currentTime
                                         debugText.text = "DETECTED: $detectedName $percent% - AUDIO TRIGGERED!"
                                     } else {
                                         debugText.text = "DETECTED: $detectedName $percent% (Audio Cooldown)"
                                     }
                                 } else {
-                                    debugText.text = "DETECTED: $detectedName $percent% (Verifying 1s...)"
+                                    debugText.text = "DETECTED: $detectedName $percent% (Verifying 0.5s...)"
                                 }
                             }
                         } else {
                             debugText.text = "DETECTED: $detectedName $percent% (Too far to speak)"
                             currentlyTrackingObject = ""
+                            isFirstWarningGiven = false // Reset memory if they step backwards away from it
                         }
                     } else {
                         // Not confident enough. Hide everything.
                         currentlyTrackingObject = ""
+                        isFirstWarningGiven = false
                         debugText.text = "Scanning..."
-                        overlay.drawBox(null, "") // Pass empty text when clearing the box
+                        overlay.drawBox(null, "")
                     }
-                }
+                } // <--- THIS CLOSES runOnUiThread
 
             } catch (e: Exception) {
                 runOnUiThread {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     debugText.text = "AI Engine Note: ${e.message}"
                 }
-            }
-        }
-        imageProxy.close()
-    }
+            } // <--- THIS CLOSES THE catch BLOCK
+        } // <--- THIS CLOSES if (tflite != null)
+
+        imageProxy.close() // ALWAYS close the frame!
+    } // <--- THIS CLOSES THE runInference FUNCTION
 
     override fun onDestroy() {
         super.onDestroy()
@@ -258,4 +275,4 @@ class MainActivity : AppCompatActivity() {
             tts.shutdown()
         }
     }
-}
+} // <--- THIS CLOSES THE ENTIRE MainActivity CLASS

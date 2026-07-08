@@ -12,7 +12,7 @@ import android.view.View
 class BoundingBoxOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
     private var currentBox: RectF? = null
-    private var currentText: String = "" // NEW: Stores the W & H text
+    private var currentText: String = "" // Stores the W & H text
 
     // This is our "Green Marker" to draw the box
     private val boxPaint = Paint().apply {
@@ -21,13 +21,13 @@ class BoundingBoxOverlay(context: Context, attrs: AttributeSet?) : View(context,
         strokeWidth = 10f // Makes the line nice and thick
     }
 
-    // NEW: Paint for the dark background behind the text so it's always readable
+    // Paint for the dark background behind the text so it's always readable
     private val textBgPaint = Paint().apply {
         color = Color.parseColor("#99000000") // Semi-transparent black
         style = Paint.Style.FILL
     }
 
-    // NEW: Paint for the white text itself
+    // Paint for the white text itself
     private val textPaint = Paint().apply {
         color = Color.WHITE
         textSize = 50f
@@ -35,7 +35,7 @@ class BoundingBoxOverlay(context: Context, attrs: AttributeSet?) : View(context,
         isFakeBoldText = true
     }
 
-    // UPDATE: MainActivity now passes BOTH the box coordinates AND the text!
+    // MainActivity now passes BOTH the box coordinates AND the text!
     fun drawBox(box: RectF?, text: String = "") {
         currentBox = box
         currentText = text
@@ -55,20 +55,20 @@ class BoundingBoxOverlay(context: Context, attrs: AttributeSet?) : View(context,
                 // Figure out how wide the text is so we can draw a perfect background box for it
                 val textWidth = textPaint.measureText(currentText)
 
-                // Draw the dark background block just below the bottom-left corner of the box
+                // NEW MATH: Draw the dark background block inside the TOP-LEFT corner of the box
                 canvas.drawRect(
                     rect.left,
-                    rect.bottom,
-                    rect.left + textWidth + 20f, // Add 20px padding to the right
-                    rect.bottom + 70f,           // Drop down 70px for the background height
+                    rect.top,                      // Start exactly at the top line of the box
+                    rect.left + textWidth + 20f,   // Add 20px padding to the right
+                    rect.top + 70f,                // Go down 70px from the top for the background height
                     textBgPaint
                 )
 
-                // Draw the actual White Text inside the background block
+                // NEW MATH: Draw the actual White Text inside the background block
                 canvas.drawText(
                     currentText,
                     rect.left + 10f,   // 10px padding from the left edge
-                    rect.bottom + 50f, // Drop down 50px so it sits neatly inside the dark box
+                    rect.top + 50f,    // Drop down 50px from the top so it sits neatly inside the dark box
                     textPaint
                 )
             }
