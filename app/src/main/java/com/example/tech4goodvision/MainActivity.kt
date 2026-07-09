@@ -224,11 +224,11 @@ class MainActivity : AppCompatActivity() {
                                         if (isTtsReady) {
                                             if (!isFirstWarningGiven) {
                                                 // The First Warning
-                                                tts.speak("$detectedName, 1 meter ahead, honey", TextToSpeech.QUEUE_FLUSH, null, null)
+                                                tts.speak("A $detectedName is within 1 meter from you, brother", TextToSpeech.QUEUE_FLUSH, null, null)
                                                 isFirstWarningGiven = true // Mark it as spoken!
                                             } else {
                                                 // The Reminder (if they are standing still)
-                                                tts.speak("$detectedName is still in front of you, honey", TextToSpeech.QUEUE_FLUSH, null, null)
+                                                tts.speak("$detectedName is still in front of you, brother", TextToSpeech.QUEUE_FLUSH, null, null)
                                             }
                                         }
 
