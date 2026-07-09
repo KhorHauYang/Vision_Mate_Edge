@@ -30,9 +30,9 @@ class MainActivity : AppCompatActivity() {
     private var currentlyTrackingObject: String = ""
     private var trackingStartTime: Long = 0
     private var lastSpokenTime: Long = 0
-    private var isFirstWarningGiven: Boolean = false // NEW: Remembers if we said the 1st warning!
+    private var isFirstWarningGiven: Boolean = false
     private val cooldownTimer = 4000L
-    private val stareTimer = 500L
+    private val stareTimer = 200L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         try {
             tflite = Interpreter(loadModelFile())
             Toast.makeText(this, "AI Brain Loaded Successfully!", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Toast.makeText(this, "Waiting for model.tflite in assets...", Toast.LENGTH_LONG).show()
         }
 
@@ -102,29 +102,36 @@ class MainActivity : AppCompatActivity() {
                 val uprightBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
                 val resizedBitmap = android.graphics.Bitmap.createScaledBitmap(uprightBitmap, 512, 512, true)
 
+                // 1. Prepare buffer for NCHW (Planar) data
                 val byteBuffer = java.nio.ByteBuffer.allocateDirect(512 * 512 * 3 * 4)
                 byteBuffer.order(java.nio.ByteOrder.nativeOrder())
 
                 val intValues = IntArray(512 * 512)
                 resizedBitmap.getPixels(intValues, 0, 512, 0, 0, 512, 512)
 
-                var pixel = 0
+                // 2. 🔥 NCHW LOOP: Separates R, G, and B into their own memory blocks
+                byteBuffer.rewind()
+                val channelSize = 512 * 512
                 for (i in 0 until 512) {
                     for (j in 0 until 512) {
-                        val valInt = intValues[pixel++]
-                        byteBuffer.putFloat(((valInt shr 16) and 0xFF) / 255.0f)
-                        byteBuffer.putFloat(((valInt shr 8) and 0xFF) / 255.0f)
-                        byteBuffer.putFloat((valInt and 0xFF) / 255.0f)
+                        val pixelIndex = i * 512 + j
+                        val valInt = intValues[pixelIndex]
+
+                        // Red block, then Green block, then Blue block
+                        byteBuffer.putFloat(pixelIndex * 4, ((valInt shr 16) and 0xFF) / 255.0f) // Red
+                        byteBuffer.putFloat((channelSize + pixelIndex) * 4, ((valInt shr 8) and 0xFF) / 255.0f) // Green
+                        byteBuffer.putFloat((channelSize * 2 + pixelIndex) * 4, (valInt and 0xFF) / 255.0f) // Blue
                     }
                 }
 
-                val outputTensor = Array(1) { Array(10) { FloatArray(5376) } }
+                // 7 Classes + 4 Coordinates = 11
+                val outputTensor = Array(1) { Array(11) { FloatArray(5376) } }
                 tflite?.run(byteBuffer, outputTensor)
 
                 var bestScore = 0.0f
                 var bestClassIndex = -1
                 var bestBoxIndex = -1
-                val numClasses = 6
+                val numClasses = 7 // Set to 7 classes
 
                 for (i in 0 until 5376) {
                     for (c in 0 until numClasses) {
@@ -141,7 +148,8 @@ class MainActivity : AppCompatActivity() {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
-                    val labels = arrayOf("Chair", "Door", "Staircase", "Table", "Unmarked Step", "Motorcycle")
+                    // Labels matched to 7-class model (Car is index 0)
+                    val labels = arrayOf("Car", "Chair", "Door", "Staircase", "Table", "Unmarked Step", "motorcycle")
                     val detectedName = labels[bestClassIndex]
 
                     // Get Coordinates & Size Math
@@ -153,8 +161,6 @@ class MainActivity : AppCompatActivity() {
                     if (cx > 2f) { cx /= 512f; cy /= 512f; w /= 512f; h /= 512f }
 
                     val screenPercentage = (w * h) * 100f
-
-                    // NEW: Create the floating label for Width and Height
                     val wPercentStr = String.format("%.1f", w * 100f)
                     val hPercentStr = String.format("%.1f", h * 100f)
                     val dimensionsText = "W: $wPercentStr% | H: $hPercentStr%"
@@ -171,12 +177,13 @@ class MainActivity : AppCompatActivity() {
                     // =========================================
                     var isConfident = false
                     val passingGrade = when (detectedName) {
+                        "Car" -> 0.55f
                         "Chair" -> 0.85f
-                        "Staircase" -> 0.70f
+                        "Staircase" -> 0.99f
                         "Unmarked Step" -> 0.65f
                         "Table" -> 0.50f
-                        "Motorcycle" -> 0.40f
-                        else -> 0.65f
+                        "motorcycle" -> 0.40f
+                        else -> 0.65f            // Covers "Door" perfectly
                     }
 
                     if (bestScore > passingGrade) {
@@ -185,23 +192,22 @@ class MainActivity : AppCompatActivity() {
 
                     // =========================================
                     // 2. AUDIO RULE: Is it dangerously close to the user?
-                    // NOTE: Thresholds updated based on your recent photo sizes!
                     // =========================================
                     var isCloseEnough = false
                     when (detectedName) {
+                        "Car" -> if (screenPercentage > 35f) isCloseEnough = true
                         "Chair" -> if (screenPercentage > 20f) isCloseEnough = true
-                        "Door" -> if (screenPercentage > 72f) isCloseEnough = true
-                        "Staircase" -> if (screenPercentage > 15f) isCloseEnough = true
+                        "Door" -> if (screenPercentage > 70f) isCloseEnough = true
+                        "Staircase" -> if (screenPercentage > 20f) isCloseEnough = true
                         "Table" -> if (screenPercentage > 25f) isCloseEnough = true
                         "Unmarked Step" -> if (screenPercentage > 7f) isCloseEnough = true
-                        "Motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
+                        "motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
                     }
 
                     // =========================================
                     // 3. EXECUTION LOGIC
                     // =========================================
                     if (isConfident) {
-                        // INSTANTLY DRAW THE GREEN BOX AND THE W/H TEXT!
                         val percent = String.format("%.1f", bestScore * 100)
                         overlay.drawBox(android.graphics.RectF(left, top, right, bottom), dimensionsText)
 
@@ -211,7 +217,7 @@ class MainActivity : AppCompatActivity() {
                             if (detectedName != currentlyTrackingObject) {
                                 currentlyTrackingObject = detectedName
                                 trackingStartTime = currentTime
-                                isFirstWarningGiven = false // NEW: Reset memory for a new object!
+                                isFirstWarningGiven = false
                                 debugText.text = "DETECTED: $detectedName $percent% (Getting closer...)"
 
                             } else {
@@ -220,14 +226,12 @@ class MainActivity : AppCompatActivity() {
                                 if (timeStared >= stareTimer) {
                                     if (currentTime - lastSpokenTime > cooldownTimer) {
 
-                                        // 🧠 NEW: Smart Audio Logic!
+                                        // 🧠 Smart Audio Logic
                                         if (isTtsReady) {
                                             if (!isFirstWarningGiven) {
-                                                // The First Warning
                                                 tts.speak("A $detectedName is within 1 meter from you, brother", TextToSpeech.QUEUE_FLUSH, null, null)
-                                                isFirstWarningGiven = true // Mark it as spoken!
+                                                isFirstWarningGiven = true
                                             } else {
-                                                // The Reminder (if they are standing still)
                                                 tts.speak("$detectedName is still in front of you, brother", TextToSpeech.QUEUE_FLUSH, null, null)
                                             }
                                         }
@@ -244,7 +248,7 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             debugText.text = "DETECTED: $detectedName $percent% (Too far to speak)"
                             currentlyTrackingObject = ""
-                            isFirstWarningGiven = false // Reset memory if they step backwards away from it
+                            isFirstWarningGiven = false
                         }
                     } else {
                         // Not confident enough. Hide everything.
@@ -255,16 +259,16 @@ class MainActivity : AppCompatActivity() {
                     }
                 } // <--- THIS CLOSES runOnUiThread
 
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 runOnUiThread {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
-                    debugText.text = "AI Engine Note: ${e.message}"
+                    debugText.text = "AI Engine Note: ${e.message ?: e.toString()}"
                 }
-            } // <--- THIS CLOSES THE catch BLOCK
-        } // <--- THIS CLOSES if (tflite != null)
+            }
+        }
 
-        imageProxy.close() // ALWAYS close the frame!
-    } // <--- THIS CLOSES THE runInference FUNCTION
+        imageProxy.close()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -275,4 +279,4 @@ class MainActivity : AppCompatActivity() {
             tts.shutdown()
         }
     }
-} // <--- THIS CLOSES THE ENTIRE MainActivity CLASS
+}

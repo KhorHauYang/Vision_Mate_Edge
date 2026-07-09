@@ -4,22 +4,22 @@ plugins {
 
 android {
     namespace = "com.example.tech4goodvision"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
-    androidResources {
-        noCompress("tflite")
-    }
+    compileSdk = 34 // Ensure this is a standard integer version, e.g., 34
+
     defaultConfig {
         applicationId = "com.example.tech4goodvision"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 🔥 THIS BLOCK IS CRITICAL FOR SAMSUNG PHONES
+        // Forces 64-bit architecture to prevent the 16KB Alignment crash
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -46,11 +46,13 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+
     // Google CameraX Toolkit
     implementation("androidx.camera:camera-core:1.3.0")
     implementation("androidx.camera:camera-camera2:1.3.0")
     implementation("androidx.camera:camera-lifecycle:1.3.0")
     implementation("androidx.camera:camera-view:1.3.0")
-    // Google's new LiteRT AI Engine (Fixes the Manifest crash!)
-    implementation("com.google.ai.edge.litert:litert:1.0.1")
+
+    // 🔥 UPDATED: The ultra-stable TFLite Engine (Guaranteed 16KB Samsung Fix)
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
 }
