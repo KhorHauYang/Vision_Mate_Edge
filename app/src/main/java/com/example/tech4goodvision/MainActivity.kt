@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
                         "Chair" -> 0.85f
                         "Staircase" -> 0.99f
                         "Unmarked Step" -> 0.65f
-                        "Table" -> 0.50f
+                        "Table" -> 0.30f
                         "motorcycle" -> 0.40f
                         else -> 0.65f            // Covers "Door" perfectly
                     }
