@@ -179,7 +179,7 @@ class MainActivity : AppCompatActivity() {
                     val passingGrade = when (detectedName) {
                         "Car" -> 0.55f
                         "Chair" -> 0.85f
-                        "Staircase" -> 0.99f
+                        "Staircase" -> 0.70f
                         "Unmarked Step" -> 0.65f
                         "Table" -> 0.30f
                         "motorcycle" -> 0.40f
