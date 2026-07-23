@@ -124,14 +124,14 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // 7 Classes + 4 Coordinates = 11
-                val outputTensor = Array(1) { Array(11) { FloatArray(5376) } }
+                // 8 Classes + 4 Coordinates = 12
+                val outputTensor = Array(1) { Array(12) { FloatArray(5376) } }
                 tflite?.run(byteBuffer, outputTensor)
 
                 var bestScore = 0.0f
                 var bestClassIndex = -1
                 var bestBoxIndex = -1
-                val numClasses = 7 // Set to 7 classes
+                val numClasses = 8 // UPDATED: Set to 8 classes to include "human"
 
                 for (i in 0 until 5376) {
                     for (c in 0 until numClasses) {
@@ -148,8 +148,8 @@ class MainActivity : AppCompatActivity() {
                     val debugText = findViewById<TextView>(R.id.tv_debug_log)
                     val overlay = findViewById<BoundingBoxOverlay>(R.id.boxOverlay)
 
-                    // Labels matched to 7-class model (Car is index 0)
-                    val labels = arrayOf("Car", "Chair", "Door", "Staircase", "Table", "Unmarked Step", "motorcycle")
+                    // UPDATED: Labels matched EXACTLY to your new 8-class model order
+                    val labels = arrayOf("Car", "Chair", "Door", "Human", "Staircase", "Table", "Unmarked Step", "motorcycle")
                     val detectedName = labels[bestClassIndex]
 
                     // Get Coordinates & Size Math
@@ -177,12 +177,13 @@ class MainActivity : AppCompatActivity() {
                     // =========================================
                     var isConfident = false
                     val passingGrade = when (detectedName) {
-                        "Car" -> 0.55f
+                        "Car" -> 0.70f
                         "Chair" -> 0.85f
                         "Staircase" -> 0.70f
                         "Unmarked Step" -> 0.65f
-                        "Table" -> 0.30f
-                        "motorcycle" -> 0.40f
+                        "Table" -> 0.60f
+                        "motorcycle" -> 0.60f
+                        "Human" -> 0.55f         // FIXED: Matches the capital "H" in your labels array
                         else -> 0.65f            // Covers "Door" perfectly
                     }
 
@@ -202,6 +203,7 @@ class MainActivity : AppCompatActivity() {
                         "Table" -> if (screenPercentage > 25f) isCloseEnough = true
                         "Unmarked Step" -> if (screenPercentage > 7f) isCloseEnough = true
                         "motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
+                        "Human" -> if (screenPercentage > 35f) isCloseEnough = true // FIXED: Matches capital "H"
                     }
 
                     // =========================================
