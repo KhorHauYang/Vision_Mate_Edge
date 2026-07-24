@@ -177,12 +177,12 @@ class MainActivity : AppCompatActivity() {
                     // =========================================
                     var isConfident = false
                     val passingGrade = when (detectedName) {
-                        "Car" -> 0.70f
+                        "Car" -> 0.99f
                         "Chair" -> 0.85f
                         "Staircase" -> 0.70f
                         "Unmarked Step" -> 0.65f
                         "Table" -> 0.60f
-                        "motorcycle" -> 0.60f
+                        "motorcycle" -> 0.99f
                         "Human" -> 0.55f         // FIXED: Matches the capital "H" in your labels array
                         else -> 0.65f            // Covers "Door" perfectly
                     }
@@ -244,7 +244,7 @@ class MainActivity : AppCompatActivity() {
                                         debugText.text = "DETECTED: $detectedName $percent% (Audio Cooldown)"
                                     }
                                 } else {
-                                    debugText.text = "DETECTED: $detectedName $percent% (Verifying 0.5s...)"
+                                    debugText.text = "DETECTED: $detectedName $percent% (Verifying 0.2s...)"
                                 }
                             }
                         } else {
