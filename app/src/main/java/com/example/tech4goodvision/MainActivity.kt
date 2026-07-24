@@ -178,13 +178,13 @@ class MainActivity : AppCompatActivity() {
                     var isConfident = false
                     val passingGrade = when (detectedName) {
                         "Car" -> 0.99f
-                        "Chair" -> 0.85f
-                        "Staircase" -> 0.70f
-                        "Unmarked Step" -> 0.65f
-                        "Table" -> 0.60f
+                        "Chair" -> 0.73f
+                        "Staircase" -> 0.99f
+                        "Unmarked Step" -> 0.75f
+                        "Table" -> 0.40f
                         "motorcycle" -> 0.99f
                         "Human" -> 0.55f         // FIXED: Matches the capital "H" in your labels array
-                        else -> 0.65f            // Covers "Door" perfectly
+                        else -> 0.99f            // Covers "Door" perfectly
                     }
 
                     if (bestScore > passingGrade) {
@@ -197,10 +197,10 @@ class MainActivity : AppCompatActivity() {
                     var isCloseEnough = false
                     when (detectedName) {
                         "Car" -> if (screenPercentage > 35f) isCloseEnough = true
-                        "Chair" -> if (screenPercentage > 20f) isCloseEnough = true
+                        "Chair" -> if (screenPercentage > 15f) isCloseEnough = true
                         "Door" -> if (screenPercentage > 70f) isCloseEnough = true
                         "Staircase" -> if (screenPercentage > 20f) isCloseEnough = true
-                        "Table" -> if (screenPercentage > 25f) isCloseEnough = true
+                        "Table" -> if (screenPercentage > 23f) isCloseEnough = true
                         "Unmarked Step" -> if (screenPercentage > 7f) isCloseEnough = true
                         "motorcycle" -> if (screenPercentage > 25f) isCloseEnough = true
                         "Human" -> if (screenPercentage > 35f) isCloseEnough = true // FIXED: Matches capital "H"
